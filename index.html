@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="matcha-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Aurea Plugin Studio</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/screens.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 1. HOME SCREEN -->
+    <section id="screen-home" class="screen active">
+      <header class="home-header">
+        <div>
+          <h1 class="app-title">Aurea Plugin Studio</h1>
+          <p class="app-subtitle">let's make some plugin for aurea!!</p>
+        </div>
+        <button id="btn-open-settings" class="icon-btn" aria-label="Settings">⚙</button>
+      </header>
+
+      <div id="project-list" class="scroll-area project-list"></div>
+
+      <button id="btn-fab-new" class="fab-add" aria-label="New Project">+</button>
+    </section>
+
+    <!-- 2. CODE EDITOR SCREEN -->
+    <section id="screen-editor" class="screen">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button id="btn-editor-back" class="icon-btn">&lt;</button>
+          <span id="editor-project-name" class="project-title">M_MatchaCC</span>
+          <span id="editor-version-badge" class="version-badge">V3</span>
+        </div>
+        <div class="top-bar-actions">
+          <button id="btn-files" class="icon-btn" title="Project Files">📁</button>
+          <button id="btn-validate" class="icon-btn" title="Check Manifest">✓</button>
+          <button id="btn-export-plugin" class="icon-btn" title="Export .aureaplugin">⇪</button>
+        </div>
+      </header>
+
+      <div id="file-tabs" class="file-tabs"></div>
+
+      <div class="editor-container">
+        <div id="line-numbers" class="line-numbers">1</div>
+        <textarea id="code-textarea" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+
+      <div id="editor-status" class="editor-status">Ready • GLSL 4.50 / Aurea V3</div>
+
+      <button id="btn-run-preview" class="fab-play" aria-label="Run Preview">▶</button>
+
+      <div id="syntax-chips" class="syntax-chips">
+        <button data-insert="float ">float</button>
+        <button data-insert="vec2 ">vec2</button>
+        <button data-insert="vec3 ">vec3</button>
+        <button data-insert="vec4 ">vec4</button>
+        <button data-insert="aurea_source">aurea_source</button>
+        <button data-insert="aurea_px_to_uv(">aurea_px_to_uv</button>
+        <button data-insert="aurea.time.x">aurea.time</button>
+      </div>
+    </section>
+
+    <!-- 3. PREVIEW MODE SCREEN -->
+    <section id="screen-preview" class="screen">
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <button id="btn-preview-back" class="icon-btn">&lt;</button>
+          <span id="preview-project-name" class="project-title">M_MatchaCC</span>
+          <span id="preview-version-badge" class="version-badge">V3</span>
+        </div>
+        <div class="top-bar-actions">
+          <button id="btn-change-media" class="icon-btn" title="Test Media">🖼</button>
+          <button id="btn-toggle-3d" class="icon-btn" title="3D Transform">🧊</button>
+          <button id="btn-export-preview" class="icon-btn" title="Export .aureaplugin">⇪</button>
+        </div>
+      </header>
+
+      <div class="preview-meta-bar">
+        <span>Preview Mode</span>
+        <span id="preview-stats">0.50x [16:9] @60FPS</span>
+      </div>
+
+      <div class="viewport-wrapper">
+        <canvas id="gl-canvas" width="640" height="360"></canvas>
+      </div>
+
+      <!-- 5-Layer Dummy Timeline -->
+      <div class="timeline-panel">
+        <div class="timeline-controls">
+          <div class="tl-group">
+            <button id="btn-add-dummy" class="tl-btn">+</button>
+            <button id="btn-stagger-dummy" class="tl-btn">⇄</button>
+          </div>
+          <div class="tl-group">
+            <button id="btn-prev-frame" class="tl-btn">⏮</button>
+            <button id="btn-play-pause" class="tl-play-btn">⏸</button>
+            <button id="btn-next-frame" class="tl-btn">⏭</button>
+          </div>
+          <div class="tl-group">
+            <button id="btn-add-keyframe" class="tl-btn">◇+</button>
+          </div>
+        </div>
+        <div class="timecode-pill" id="timecode-display">00:00:00</div>
+        <div id="dummy-layers" class="dummy-layers"></div>
+      </div>
+
+      <!-- Dynamic Parameter Controls -->
+      <div id="param-controls-container" class="param-scroll-area"></div>
+    </section>
+
+    <!-- 4. SETTINGS SCREEN -->
+    <section id="screen-settings" class="screen">
+      <header class="top-bar">
+        <div>
+          <h2 class="settings-title">Settings</h2>
+          <p class="app-subtitle">Set preferences here &gt;&gt;</p>
+        </div>
+        <button id="btn-settings-back" class="icon-btn">&lt;</button>
+      </header>
+      <div id="settings-content" class="scroll-area"></div>
+    </section>
+
+    <!-- MODAL: NEW PROJECT -->
+    <div id="modal-new-project" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <h3 class="modal-title">NEW PROJECT</h3>
+        <label class="field-label">Project name</label>
+        <input id="input-project-name" type="text" class="pill-input" placeholder="your project name" />
+
+        <label class="field-label">Creator</label>
+        <input id="input-creator-name" type="text" class="pill-input" placeholder="creator name" value="NikoAjj" />
+
+        <label class="field-label">Plugin version</label>
+        <select id="select-plugin-version" class="pill-input">
+          <option value="3" selected>V3 (Curves, Gradients, Tree UI)</option>
+          <option value="2">V2 (Panels, Scripts, APIs)</option>
+          <option value="1">V1 (Basic Shader / Stack)</option>
+        </select>
+
+        <button id="btn-create-project" class="btn-primary full-width">Make this project</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
