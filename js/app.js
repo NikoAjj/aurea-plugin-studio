@@ -2,7 +2,7 @@ import { AureaCodeEditor } from './editor/code-editor.js';
 import { AureaWebGLEngine } from './preview/webgl-engine.js';
 import { renderDynamicParams } from './preview/param-renderer.js';
 import { AureaTimeline, AVIUTL_EASING_PRESETS, BLEND_MODES } from './preview/timeline.js';
-import { validatePluginProject, exportAureaPlugin } from './exporter/packager.js';
+import { validatePluginProject, exportAureaPlugin, normalizeAureaManifest } from './exporter/packager.js';
 
 const DEFAULT_PROJECTS = [
   {
@@ -13,21 +13,23 @@ const DEFAULT_PROJECTS = [
     size: '2.6KB',
     files: {
       'plugin.json': JSON.stringify({
-        formatVersion: 3,
-        id: 'com.nikoajj.matchacc',
-        name: 'M_MatchaCC',
-        author: 'NikoAjj',
-        kind: 'shader',
-        entry: 'shader.frag',
-        params: [
-          { id: 'enabled', label: 'Active', type: 'bool', default: true },
-          { id: 'intensity', label: 'Intensity', type: 'float', min: 0, max: 1, default: 0.45 },
-          { id: 'tint', label: 'Tint Color', type: 'color', default: '#78d96f' },
-          { id: 'mode', label: 'Blend Mode', type: 'enum', options: ['Normal', 'Matcha', 'Invert'], default: 1 }
-        ]
+        AureaPlugin: {
+          version: 3,
+          id: 'com.nikoajj.matchacc',
+          name: 'M_MatchaCC',
+          author: 'NikoAjj',
+          kind: 'shader',
+          entry: 'shader.frag',
+          params: [
+            { id: 'enabled', label: 'Active', type: 'bool', default: true },
+            { id: 'intensity', label: 'Intensity', type: 'float', min: 0, max: 1, default: 0.45 },
+            { id: 'tint', label: 'Tint Color', type: 'color', default: '#78d96f' },
+            { id: 'mode', label: 'Blend Mode', type: 'enum', options: ['Normal', 'Matcha', 'Invert'], default: 1 }
+          ]
+        }
       }, null, 2),
       'shader.frag': `vec4 aurea_main(vec2 uv) {\n  vec4 src = texture(aurea_source, uv);\n  if (u_enabled < 0.5) return src;\n  float wave = 0.5 + 0.5 * sin(uv.x * 8.0 + aurea.time.x * 2.5);\n  vec3 fx = u_tint.rgb * wave;\n  if (u_mode == 2) fx = 1.0 - src.rgb;\n  vec3 col = mix(src.rgb, fx, u_intensity);\n  return vec4(col, src.a);\n}`,
-      'frame.js': `// Per-frame logic (Aurea V2/V3)\nexport function onFrame(ctx) {\n  // Read or animate uniforms here\n}`,
+      'frame.js': `// Per-frame logic\nexport function onFrame(ctx) {\n  // Read or animate uniforms here\n}`,
       'main.js': `// Batch / timeline utility script\nexport function run(project) {\n  console.log("Running M_MatchaCC helper");\n}`
     }
   },
@@ -39,15 +41,17 @@ const DEFAULT_PROJECTS = [
     size: '2.6KB',
     files: {
       'plugin.json': JSON.stringify({
-        formatVersion: 2,
-        id: 'com.nikoajj.shake',
-        name: 'M_shake',
-        author: 'NikoAjj',
-        kind: 'shader',
-        entry: 'shader.frag',
-        params: [
-          { id: 'amp', label: 'Amplitude', type: 'float', min: 0, max: 0.1, default: 0.02 }
-        ]
+        AureaPlugin: {
+          version: 2,
+          id: 'com.nikoajj.shake',
+          name: 'M_shake',
+          author: 'NikoAjj',
+          kind: 'shader',
+          entry: 'shader.frag',
+          params: [
+            { id: 'amp', label: 'Amplitude', type: 'float', min: 0, max: 0.1, default: 0.02 }
+          ]
+        }
       }, null, 2),
       'shader.frag': `vec4 aurea_main(vec2 uv) {\n  vec2 offset = vec2(sin(aurea.time.x * 30.0), cos(aurea.time.x * 25.0)) * u_amp;\n  return texture(aurea_source, clamp(uv + offset, 0.0, 1.0));\n}`
     }
@@ -82,6 +86,20 @@ function showScreen(screenId) {
   document.getElementById(screenId).classList.add('active');
 }
 
+function detectProjectMetaFromManifest(proj) {
+  if (!proj || !proj.files || !proj.files['plugin.json']) return;
+  try {
+    const raw = JSON.parse(proj.files['plugin.json']);
+    const norm = normalizeAureaManifest(raw, proj);
+    if (norm.formatVersion) proj.version = String(norm.formatVersion);
+    if (norm.name) proj.name = norm.name;
+    if (norm.author) proj.author = norm.author;
+    if (norm.id) proj.id = norm.id;
+  } catch (_) {
+    // Keep existing metadata while user is still typing JSON
+  }
+}
+
 function syncProjectManifestMeta(proj) {
   const cleanAuthor = (proj.author || 'nikoajj').toLowerCase().replace(/[^a-z0-9]/g, '') || 'creator';
   const cleanName = (proj.name || 'untitled').toLowerCase().replace(/[^a-z0-9]/g, '') || 'plugin';
@@ -90,14 +108,25 @@ function syncProjectManifestMeta(proj) {
   if (proj.files && proj.files['plugin.json']) {
     try {
       const parsed = JSON.parse(proj.files['plugin.json']);
-      parsed.id = proj.id;
-      parsed.name = proj.name;
-      parsed.author = proj.author;
+      const target = parsed.AureaPlugin && typeof parsed.AureaPlugin === 'object' ? parsed.AureaPlugin : parsed;
+      target.id = proj.id;
+      target.name = proj.name;
+      target.author = proj.author;
       proj.files['plugin.json'] = JSON.stringify(parsed, null, 2);
     } catch (_) {
       // Ignore if JSON is currently invalid while editing
     }
   }
+}
+
+function updateActiveProjectHeaderBadges() {
+  if (!state.activeProject) return;
+  detectProjectMetaFromManifest(state.activeProject);
+  const verLabel = `V${state.activeProject.version || 1}`;
+  document.getElementById('editor-project-name').textContent = state.activeProject.name;
+  document.getElementById('editor-version-badge').textContent = verLabel;
+  document.getElementById('preview-project-name').textContent = state.activeProject.name;
+  document.getElementById('preview-version-badge').textContent = verLabel;
 }
 
 function getDefaultParamValues() {
@@ -268,6 +297,7 @@ function renderProjectList() {
   }
 
   state.projects.forEach((proj, idx) => {
+    detectProjectMetaFromManifest(proj);
     const totalBytes = Object.values(proj.files).reduce((sum, txt) => sum + String(txt).length, 0);
     const sizeKb = `${Math.max(0.4, (totalBytes / 1024)).toFixed(1)}KB`;
 
@@ -278,7 +308,7 @@ function renderProjectList() {
       <div class="project-info">
         <div class="project-card-title">${proj.name}</div>
         <div class="project-card-author">${proj.author}</div>
-        <div class="project-card-meta">${sizeKb} - Plugin V${proj.version}</div>
+        <div class="project-card-meta">${sizeKb} - Plugin V${proj.version || 1}</div>
       </div>
       <button class="btn-project-menu" title="Project Options" style="color: var(--accent-primary); font-size: 22px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; line-height: 1;">≡</button>
     `;
@@ -300,11 +330,7 @@ function openProject(proj) {
   state.undoStack = [];
   state.redoStack = [];
 
-  document.getElementById('editor-project-name').textContent = proj.name;
-  document.getElementById('editor-version-badge').textContent = `V${proj.version}`;
-  document.getElementById('preview-project-name').textContent = proj.name;
-  document.getElementById('preview-version-badge').textContent = `V${proj.version}`;
-
+  updateActiveProjectHeaderBadges();
   state.editor.loadProject(proj);
   showScreen('screen-editor');
 }
@@ -321,6 +347,8 @@ function compileActiveProject() {
   }
 
   state.parsedManifest = check.manifest;
+  updateActiveProjectHeaderBadges();
+
   const fragCode = state.activeProject.files[state.parsedManifest.entry || 'shader.frag'] || '';
   const params = state.parsedManifest.params || [];
 
@@ -335,7 +363,7 @@ function compileActiveProject() {
     return false;
   }
 
-  statusEl.textContent = 'Compiled OK • WebGL2 Ready';
+  statusEl.textContent = `Compiled OK (Auto-detected V${state.parsedManifest.formatVersion}) • WebGL2 Ready`;
   statusEl.style.color = 'var(--accent-primary)';
   return true;
 }
@@ -446,7 +474,6 @@ function refreshParamControls() {
   );
 }
 
-// === OBJECT INSPECTOR WITH AFTER EFFECTS STYLE DRAGGABLE VALUE BOXES + OPACITY ===
 function renderSelectedLayerInspector() {
   let box = document.getElementById('layer-object-inspector');
   if (!box) {
@@ -554,7 +581,6 @@ function renderSelectedLayerInspector() {
     syncRender();
   });
 
-  // After Effects-style horizontal touch/mouse scrubbing on BOTH label and value box
   box.querySelectorAll('.scrub-transform-trigger').forEach(el => {
     let startX = 0;
     let startVal = 0;
@@ -606,7 +632,6 @@ function renderSelectedLayerInspector() {
     const finishScrub = () => {
       if (!active) return;
       active = false;
-      // Tap without dragging opens keyboard on the input box
       if (!moved && isInput) {
         el.focus();
         el.select();
@@ -928,12 +953,22 @@ function init() {
     lineNumbersEl: document.getElementById('line-numbers'),
     fileTabsEl: document.getElementById('file-tabs'),
     chipsContainer: document.getElementById('syntax-chips'),
-    onSave: () => { saveProjects(); renderProjectList(); }
+    onSave: () => {
+      updateActiveProjectHeaderBadges();
+      saveProjects();
+      renderProjectList();
+    }
   });
 
   renderProjectList();
   renderSettings();
   startCanvasLoop();
+
+  // Hide manual version selector in Create Modal since version is auto-detected from plugin.json
+  const manualVerSelect = document.getElementById('select-plugin-version');
+  if (manualVerSelect) {
+    manualVerSelect.style.display = 'none';
+  }
 
   document.getElementById('btn-fab-new').addEventListener('click', () => document.getElementById('modal-new-project').classList.remove('hidden'));
   document.getElementById('modal-new-project').addEventListener('click', e => {
@@ -943,24 +978,27 @@ function init() {
   document.getElementById('btn-create-project').addEventListener('click', () => {
     const nameInput = document.getElementById('input-project-name').value.trim() || 'M_UntitledFX';
     const authorInput = document.getElementById('input-creator-name').value.trim() || 'NikoAjj';
-    const version = document.getElementById('select-plugin-version').value;
     const cleanId = `com.${authorInput.toLowerCase().replace(/[^a-z0-9]/g, '')}.${nameInput.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
     const newProj = {
       id: cleanId,
       name: nameInput,
       author: authorInput,
-      version,
+      version: '3',
       size: '1.4KB',
       files: {
         'plugin.json': JSON.stringify({
-          formatVersion: Number(version),
-          id: cleanId,
-          name: nameInput,
-          author: authorInput,
-          kind: 'shader',
-          entry: 'shader.frag',
-          params: [{ id: 'intensity', label: 'Intensity', type: 'float', min: 0, max: 1, default: 0.5 }]
+          AureaPlugin: {
+            version: 3,
+            id: cleanId,
+            name: nameInput,
+            author: authorInput,
+            kind: 'shader',
+            entry: 'shader.frag',
+            params: [
+              { id: 'intensity', label: 'Intensity', type: 'float', min: 0, max: 1, default: 0.5 }
+            ]
+          }
         }, null, 2),
         'shader.frag': `vec4 aurea_main(vec2 uv) {\n  vec4 col = texture(aurea_source, uv);\n  return col;\n}`
       }
@@ -1001,7 +1039,6 @@ function init() {
     input.click();
   });
 
-  // === SMOOTH RELATIVE VIEWPORT DRAGGING (NO SNAPPING / NO PAGE SCROLL) ===
   const glCanvas = document.getElementById('gl-canvas');
   let draggingOnCanvas = false;
   let dragPointerStartX = 0;
@@ -1087,7 +1124,8 @@ function init() {
     const check = validatePluginProject(state.activeProject);
     const statusEl = document.getElementById('editor-status');
     if (check.valid) {
-      statusEl.textContent = `Manifest V${check.manifest.formatVersion || 1} Valid ✓`;
+      updateActiveProjectHeaderBadges();
+      statusEl.textContent = `Manifest V${check.manifest.formatVersion} Valid ✓`;
       statusEl.style.color = 'var(--accent-primary)';
     } else {
       statusEl.textContent = `Invalid: ${check.errors[0]}`;
