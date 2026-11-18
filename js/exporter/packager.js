@@ -1,44 +1,108 @@
+export function normalizeAureaManifest(rawManifest, fallbackProject = {}) {
+  const root = rawManifest && typeof rawManifest === 'object' ? rawManifest : {};
+  const meta = root.AureaPlugin && typeof root.AureaPlugin === 'object' ? root.AureaPlugin : root;
+
+  const detectedVersion = Number(
+    meta.formatVersion ??
+    meta.version ??
+    meta.apiVersion ??
+    root.formatVersion ??
+    root.version ??
+    1
+  ) || 1;
+
+  const name = String(
+    meta.name ??
+    meta.title ??
+    meta.pluginName ??
+    root.name ??
+    fallbackProject.name ??
+    ''
+  ).trim();
+
+  const author = String(
+    meta.author ??
+    meta.creator ??
+    root.author ??
+    fallbackProject.author ??
+    'NikoAjj'
+  ).trim();
+
+  const id = String(
+    meta.id ??
+    meta.package ??
+    root.id ??
+    fallbackProject.id ??
+    `com.${author.toLowerCase().replace(/[^a-z0-9]/g, '') || 'creator'}.${name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'plugin'}`
+  ).trim();
+
+  const entry = String(
+    meta.entry ??
+    meta.shader ??
+    meta.main ??
+    root.entry ??
+    'shader.frag'
+  ).trim();
+
+  const rawParams = Array.isArray(meta.params)
+    ? meta.params
+    : Array.isArray(meta.parameters)
+      ? meta.parameters
+      : Array.isArray(root.params)
+        ? root.params
+        : [];
+
+  const params = rawParams.map((p, idx) => ({
+    ...p,
+    id: String(p.id || p.name || `param_${idx}`),
+    label: String(p.label || p.title || p.name || p.id || `Param ${idx + 1}`),
+    type: String(p.type || 'float').toLowerCase()
+  }));
+
+  return {
+    ...meta,
+    formatVersion: detectedVersion,
+    id,
+    name,
+    author,
+    entry,
+    params,
+    _isWrappedAureaPlugin: Boolean(root.AureaPlugin)
+  };
+}
+
 export function validatePluginProject(project) {
   const errors = [];
-  const rawManifest = project?.files?.['plugin.json'];
-
-  if (!rawManifest) {
-    return { valid: false, errors: ['File plugin.json tidak ditemukan.'] };
+  if (!project || !project.files) {
+    return { valid: false, errors: ['Invalid project structure.'], manifest: null };
   }
 
-  let manifest;
+  const rawJson = project.files['plugin.json'];
+  if (!rawJson) {
+    return { valid: false, errors: ['Missing plugin.json file.'], manifest: null };
+  }
+
+  let parsedRaw;
   try {
-    manifest = JSON.parse(rawManifest);
-  } catch (e) {
-    return { valid: false, errors: [`Sintaks JSON error: ${e.message}`] };
+    parsedRaw = JSON.parse(rawJson);
+  } catch (err) {
+    return { valid: false, errors: [`Invalid JSON syntax in plugin.json: ${err.message}`], manifest: null };
   }
 
-  // Validasi ID reverse-domain (contoh: com.nikoajj.matchacc)
-  if (!manifest.id || !/^[a-z0-9]+(\.[a-z0-9_-]+)+$/i.test(manifest.id)) {
-    errors.push('Field "id" harus format reverse-domain (mis. com.nikoajj.namaplugin).');
+  const manifest = normalizeAureaManifest(parsedRaw, project);
+
+  if (!manifest.name) {
+    errors.push("Plugin 'name' is required in plugin.json.");
   }
 
-  if (!manifest.name || typeof manifest.name !== 'string') {
-    errors.push('Field "name" wajib diisi.');
+  const entryFile = manifest.entry || 'shader.frag';
+  if (!project.files[entryFile]) {
+    errors.push(`Entry shader file '${entryFile}' not found in project.`);
   }
 
-  const ver = Number(manifest.formatVersion || project.version || 1);
-  if (![1, 2, 3].includes(ver)) {
-    errors.push('formatVersion harus bernilai 1, 2, atau 3.');
-  }
-
-  const kind = manifest.kind || 'shader';
-  if ((kind === 'shader' || kind === 'shader3d') && !manifest.entry) {
-    errors.push(`Plugin jenis "${kind}" wajib menentukan field "entry" (mis. "shader.frag").`);
-  }
-
-  if (manifest.entry && !project.files[manifest.entry]) {
-    errors.push(`File entry "${manifest.entry}" tidak ditemukan dalam proyek.`);
-  }
-
-  if (Array.isArray(manifest.params) && manifest.params.length > 32) {
-    errors.push('Jumlah parameter melebihi batas maksimal Aurea (maks. 32 params).');
-  }
+  manifest.params.forEach((p, i) => {
+    if (!p.id) errors.push(`Parameter #${i + 1} is missing an 'id' or 'name'.`);
+  });
 
   return {
     valid: errors.length === 0,
@@ -47,102 +111,27 @@ export function validatePluginProject(project) {
   };
 }
 
-// Pure JS ZIP Builder (Zero-dependency) untuk menghasilkan file .aureaplugin valid
 export function exportAureaPlugin(project) {
   const check = validatePluginProject(project);
   if (!check.valid) {
     return { ok: false, errors: check.errors };
   }
 
-  const encoder = new TextEncoder();
-  const fileEntries = Object.entries(project.files);
-  const localChunks = [];
-  const centralChunks = [];
-  let offset = 0;
+  const bundle = {
+    exportedBy: 'Aurea Plugin Studio',
+    detectedVersion: check.manifest.formatVersion,
+    manifest: JSON.parse(project.files['plugin.json']),
+    files: project.files
+  };
 
-  fileEntries.forEach(([filename, content]) => {
-    const nameBytes = encoder.encode(filename);
-    const dataBytes = content instanceof Uint8Array ? content : encoder.encode(String(content));
-    const crc = crc32(dataBytes);
-
-    // Local File Header (30 bytes + name)
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const lv = new DataView(localHeader.buffer);
-    lv.setUint32(0, 0x04034b50, true); // Local file header signature
-    lv.setUint16(4, 20, true);         // Version needed
-    lv.setUint16(6, 0x0800, true);     // UTF-8 flag
-    lv.setUint16(8, 0, true);          // Compression method: 0 (STORE)
-    lv.setUint16(10, 0, true);         // Mod time
-    lv.setUint16(12, 0, true);         // Mod date
-    lv.setUint32(14, crc, true);       // CRC-32
-    lv.setUint32(18, dataBytes.length, true); // Compressed size
-    lv.setUint32(22, dataBytes.length, true); // Uncompressed size
-    lv.setUint16(26, nameBytes.length, true); // Filename length
-    lv.setUint16(28, 0, true);         // Extra field length
-    localHeader.set(nameBytes, 30);
-
-    localChunks.push(localHeader, dataBytes);
-
-    // Central Directory Header (46 bytes + name)
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const cv = new DataView(centralHeader.buffer);
-    cv.setUint32(0, 0x02014b50, true); // Central directory signature
-    cv.setUint16(4, 20, true);         // Version made by
-    cv.setUint16(6, 20, true);         // Version needed
-    cv.setUint16(8, 0x0800, true);     // UTF-8 flag
-    cv.setUint16(10, 0, true);         // Compression: STORE
-    cv.setUint16(12, 0, true);
-    cv.setUint16(14, 0, true);
-    cv.setUint32(16, crc, true);
-    cv.setUint32(20, dataBytes.length, true);
-    cv.setUint32(24, dataBytes.length, true);
-    cv.setUint16(28, nameBytes.length, true);
-    cv.setUint16(30, 0, true);
-    cv.setUint16(32, 0, true);
-    cv.setUint16(34, 0, true);
-    cv.setUint16(36, 0, true);
-    cv.setUint32(38, 0, true);
-    cv.setUint32(42, offset, true);    // Relative offset of local header
-    centralHeader.set(nameBytes, 46);
-
-    centralChunks.push(centralHeader);
-    offset += localHeader.length + dataBytes.length;
-  });
-
-  const centralSize = centralChunks.reduce((acc, c) => acc + c.length, 0);
-  const eocd = new Uint8Array(22);
-  const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true);   // End of central directory signature
-  ev.setUint16(4, 0, true);
-  ev.setUint16(6, 0, true);
-  ev.setUint16(8, fileEntries.length, true);
-  ev.setUint16(10, fileEntries.length, true);
-  ev.setUint32(12, centralSize, true);
-  ev.setUint32(16, offset, true);
-  ev.setUint16(20, 0, true);
-
-  const blob = new Blob([...localChunks, ...centralChunks, eocd], {
-    type: 'application/octet-stream'
-  });
-
-  const safeName = (check.manifest.name || project.name || 'plugin').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  const filename = `${check.manifest.name.replace(/\s+/g, '_')}_V${check.manifest.formatVersion}.aurea.json`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${safeName}.aureaplugin`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 
-  return { ok: true, filename: `${safeName}.aureaplugin` };
-}
-
-function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) {
-    crc ^= bytes[i];
-    for (let j = 0; j < 8; j++) {
-      crc = (crc & 1) ? (crc >>> 1) ^ 0xedb88320 : (crc >>> 1);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
+  return { ok: true, filename, manifest: check.manifest };
 }
