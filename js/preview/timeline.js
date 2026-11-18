@@ -59,6 +59,11 @@ export class AureaTimeline {
     this.panStartX = 0;
     this.panInitialScroll = 0;
 
+    // Pinch-to-zoom state for mobile touchscreens
+    this.activePointers = new Map();
+    this.initialPinchDist = 0;
+    this.initialPinchZoom = 1.0;
+
     this.layers = [
       this.createLayerObject('Media', {
         id: 1,
@@ -255,11 +260,9 @@ export class AureaTimeline {
     const w = this.compCanvas.width;
     const h = this.compCanvas.height;
 
-    // Kanvas dasar harus CLEAR (transparan murni), bukan warna solid
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, w, h);
 
-    // Render dari BAWAH ke ATAS (index akhir -> index 0)
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const layer = this.layers[i];
       if (t < layer.start - 0.001 || t > layer.start + layer.length + 0.001) continue;
@@ -281,7 +284,6 @@ export class AureaTimeline {
       }
 
       if (layer.hasEffect && applyPluginShader) {
-        // Render layer ke buffer transparan terpisah agar alpha luar gambar tetap 0
         const temp = document.createElement('canvas');
         temp.width = w;
         temp.height = h;
@@ -291,7 +293,6 @@ export class AureaTimeline {
 
         const effected = applyPluginShader(temp, t, evalState.params);
         if (effected) {
-          // Mask ulang dengan alpha asli layer supaya efek shader tidak membocorkan warna ke area transparan
           const masked = document.createElement('canvas');
           masked.width = w;
           masked.height = h;
@@ -410,6 +411,12 @@ export class AureaTimeline {
       this.setTime(ratio * this.duration, true);
     };
 
+    const getPinchDistance = () => {
+      const pts = Array.from(this.activePointers.values());
+      if (pts.length < 2) return 0;
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    };
+
     this.containerEl.addEventListener('wheel', e => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -420,6 +427,17 @@ export class AureaTimeline {
     }, { passive: false });
 
     this.containerEl.addEventListener('pointerdown', e => {
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // Two-finger pinch zoom on touchscreens
+      if (this.activePointers.size === 2) {
+        this.isScrubbing = false;
+        this.draggingLayer = null;
+        this.initialPinchDist = getPinchDistance();
+        this.initialPinchZoom = this.zoom;
+        return;
+      }
+
       if (e.button === 1 || e.shiftKey) {
         e.preventDefault();
         this.isPanning = true;
@@ -435,6 +453,17 @@ export class AureaTimeline {
     });
 
     this.containerEl.addEventListener('pointermove', e => {
+      if (this.activePointers.has(e.pointerId)) {
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      if (this.activePointers.size === 2 && this.initialPinchDist > 10) {
+        const curDist = getPinchDistance();
+        const scaleRatio = curDist / this.initialPinchDist;
+        this.setZoom(this.initialPinchZoom * scaleRatio);
+        return;
+      }
+
       const trackCanvas = this.containerEl.querySelector('.tl-zoom-canvas');
       if (!trackCanvas) return;
       const rect = trackCanvas.getBoundingClientRect();
@@ -458,13 +487,14 @@ export class AureaTimeline {
           const maxStart = Math.max(0, this.duration - this.draggingLayer.length);
           this.draggingLayer.start = Math.max(0, Math.min(maxStart, this.dragInitialStart + deltaSec));
 
+          // Vertical finger/mouse drag threshold (26px for comfortable touch reordering)
           const deltaY = e.clientY - this.dragStartY;
           const curIdx = this.layers.indexOf(this.draggingLayer);
-          if (deltaY < -18 && curIdx > 0) {
+          if (deltaY < -26 && curIdx > 0) {
             this.layers.splice(curIdx, 1);
             this.layers.splice(curIdx - 1, 0, this.draggingLayer);
             this.dragStartY = e.clientY;
-          } else if (deltaY > 18 && curIdx < this.layers.length - 1) {
+          } else if (deltaY > 26 && curIdx < this.layers.length - 1) {
             this.layers.splice(curIdx, 1);
             this.layers.splice(curIdx + 1, 0, this.draggingLayer);
             this.dragStartY = e.clientY;
@@ -483,7 +513,10 @@ export class AureaTimeline {
       }
     });
 
-    const endInteraction = () => {
+    const endInteraction = e => {
+      if (e && e.pointerId !== undefined) {
+        this.activePointers.delete(e.pointerId);
+      }
       if ((this.draggingLayer || this.draggingKeyframe) && this.onSeek) {
         this.onSeek(this.currentTime);
       }
@@ -492,6 +525,7 @@ export class AureaTimeline {
       this.draggingLayer = null;
       this.layerDragMode = null;
       this.draggingKeyframe = null;
+      this.initialPinchDist = 0;
     };
 
     this.containerEl.addEventListener('pointerup', endInteraction);
@@ -503,36 +537,40 @@ export class AureaTimeline {
     this.containerEl.innerHTML = '';
     this.containerEl.style.overflowX = 'auto';
     this.containerEl.style.overflowY = 'auto';
-    this.containerEl.style.maxHeight = '132px';
+    this.containerEl.style.maxHeight = '165px';
     this.containerEl.style.userSelect = 'none';
+    this.containerEl.style.touchAction = 'none';
 
     const canvas = document.createElement('div');
     canvas.className = 'tl-zoom-canvas';
-    canvas.style.cssText = `position:relative;width:${this.zoom * 100}%;min-height:86px;display:flex;flex-direction:column;gap:4px;`;
+    canvas.style.cssText = `position:relative;width:${this.zoom * 100}%;min-height:110px;display:flex;flex-direction:column;gap:6px;touch-action:none;`;
 
+    // Taller touch-friendly scrubber ruler (24px)
     const rulerRow = document.createElement('div');
-    rulerRow.style.cssText = 'position:relative;height:16px;border-bottom:1px solid var(--border-subtle);background:rgba(0,0,0,0.28);';
+    rulerRow.style.cssText = 'position:relative;height:24px;border-bottom:1px solid var(--border-subtle);background:rgba(0,0,0,0.32);display:flex;align-items:center;';
     const step = this.zoom >= 2.5 ? 0.5 : 1.0;
     for (let s = 0; s <= this.duration; s += step) {
       const tick = document.createElement('span');
       tick.textContent = `${s}s`;
-      tick.style.cssText = `position:absolute;left:${(s / this.duration) * 100}%;font-size:9px;font-family:var(--font-code);color:var(--text-muted);padding-left:2px;border-left:1px solid var(--border-subtle);pointer-events:none;`;
+      tick.style.cssText = `position:absolute;left:${(s / this.duration) * 100}%;font-size:10px;font-family:var(--font-code);color:var(--text-muted);padding-left:3px;border-left:1px solid var(--border-subtle);pointer-events:none;`;
       rulerRow.appendChild(tick);
     }
     canvas.appendChild(rulerRow);
 
     this.layers.forEach((layer, index) => {
+      // Touch-friendly 34px row height
       const track = document.createElement('div');
-      track.style.cssText = 'position:relative;height:22px;width:100%;';
+      track.style.cssText = 'position:relative;height:34px;width:100%;';
 
       const isSelected = layer.id === this.selectedLayerId;
       const bar = document.createElement('div');
       bar.className = 'dummy-layer-bar';
-      bar.style.cssText = `position:absolute;top:1px;height:20px;left:${(layer.start / this.duration) * 100}%;width:${(layer.length / this.duration) * 100}%;cursor:grab;border:${isSelected ? '1.5px solid #ffffff' : '1px solid var(--border-strong)'};background:${isSelected ? 'rgba(120,217,111,0.35)' : 'var(--accent-badge)'};padding:0;justify-content:space-between;overflow:hidden;`;
+      bar.style.cssText = `position:absolute;top:1px;height:32px;left:${(layer.start / this.duration) * 100}%;width:${(layer.length / this.duration) * 100}%;cursor:grab;border:${isSelected ? '2px solid #ffffff' : '1px solid var(--border-strong)'};background:${isSelected ? 'rgba(120,217,111,0.38)' : 'var(--accent-badge)'};border-radius:6px;padding:0;justify-content:space-between;overflow:hidden;touch-action:none;`;
 
+      // Wide 24px touch handles for trimming
       const leftHandle = document.createElement('span');
       leftHandle.textContent = '◀';
-      leftHandle.style.cssText = 'display:flex;align-items:center;justify-content:center;width:14px;height:100%;font-size:8px;background:rgba(0,0,0,0.35);color:var(--accent-primary);cursor:ew-resize;flex-shrink:0;z-index:3;';
+      leftHandle.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:100%;font-size:10px;background:rgba(0,0,0,0.42);color:var(--accent-primary);cursor:ew-resize;flex-shrink:0;z-index:3;touch-action:none;';
       leftHandle.addEventListener('pointerdown', e => {
         e.stopPropagation();
         if (this.onStateMutated) this.onStateMutated();
@@ -549,11 +587,11 @@ export class AureaTimeline {
       const fxTag = layer.hasEffect ? ' [FX]' : '';
       const label = document.createElement('span');
       label.textContent = `#${index + 1} ${layer.type === 'Text' ? `T:"${layer.text}"` : layer.name}${fxTag}`;
-      label.style.cssText = 'font-size:9px;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px;pointer-events:none;z-index:2;';
+      label.style.cssText = 'font-size:11px;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;pointer-events:none;z-index:2;';
 
       const rightHandle = document.createElement('span');
       rightHandle.textContent = '▶';
-      rightHandle.style.cssText = 'display:flex;align-items:center;justify-content:center;width:14px;height:100%;font-size:8px;background:rgba(0,0,0,0.35);color:var(--accent-primary);cursor:ew-resize;flex-shrink:0;z-index:3;';
+      rightHandle.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:100%;font-size:10px;background:rgba(0,0,0,0.42);color:var(--accent-primary);cursor:ew-resize;flex-shrink:0;z-index:3;touch-action:none;';
       rightHandle.addEventListener('pointerdown', e => {
         e.stopPropagation();
         if (this.onStateMutated) this.onStateMutated();
@@ -571,6 +609,7 @@ export class AureaTimeline {
       bar.appendChild(label);
       bar.appendChild(rightHandle);
 
+      // Larger 12px keyframe diamonds for easier finger dragging
       const ownKfs = this.getLayerKeyframesFlat(layer);
       ownKfs.forEach(({ group, key, kfRef }) => {
         if (kfRef.time >= layer.start && kfRef.time <= layer.start + layer.length) {
@@ -578,7 +617,7 @@ export class AureaTimeline {
           const innerKf = document.createElement('span');
           innerKf.className = 'tl-kf-diamond';
           innerKf.title = `${key} @ ${kfRef.time}s`;
-          innerKf.style.cssText = `position:absolute;top:6px;left:calc(${relPct}% - 4px);width:7px;height:7px;transform:rotate(45deg);background:${Math.abs(kfRef.time - this.currentTime) < 0.06 ? '#ffffff' : 'var(--accent-primary)'};border:1px solid #0f1c0e;cursor:ew-resize;z-index:4;`;
+          innerKf.style.cssText = `position:absolute;top:10px;left:calc(${relPct}% - 6px);width:11px;height:11px;transform:rotate(45deg);background:${Math.abs(kfRef.time - this.currentTime) < 0.06 ? '#ffffff' : 'var(--accent-primary)'};border:1.5px solid #0f1c0e;cursor:ew-resize;z-index:4;touch-action:none;`;
           innerKf.addEventListener('pointerdown', e => {
             e.stopPropagation();
             if (this.onStateMutated) this.onStateMutated();
