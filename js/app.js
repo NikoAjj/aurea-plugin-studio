@@ -147,16 +147,16 @@ function showProjectActionMenu(proj, idx, anchorBtn) {
   menu.dataset.targetIdx = String(idx);
   menu.style.cssText = `
     position: fixed;
-    top: ${Math.min(window.innerHeight - 230, rect.bottom + 6)}px;
+    top: ${Math.min(window.innerHeight - 260, rect.bottom + 6)}px;
     right: ${Math.max(16, window.innerWidth - rect.right)}px;
-    min-width: 195px;
+    min-width: 210px;
     background: var(--bg-surface);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
-    padding: 6px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
     z-index: 999;
     box-shadow: 0 10px 28px rgba(0,0,0,0.65);
   `;
@@ -227,13 +227,13 @@ function showProjectActionMenu(proj, idx, anchorBtn) {
     btn.textContent = act.label;
     btn.style.cssText = `
       text-align: left;
-      padding: 8px 12px;
-      font-size: 12px;
+      padding: 11px 14px;
+      font-size: 13px;
       font-weight: 600;
       border-radius: var(--radius-sm);
       color: ${act.color};
       background: transparent;
-      transition: background 0.15s ease;
+      min-height: 40px;
     `;
     btn.onmouseenter = () => (btn.style.backgroundColor = 'var(--accent-badge)');
     btn.onmouseleave = () => (btn.style.backgroundColor = 'transparent');
@@ -280,7 +280,7 @@ function renderProjectList() {
         <div class="project-card-author">${proj.author}</div>
         <div class="project-card-meta">${sizeKb} - Plugin V${proj.version}</div>
       </div>
-      <button class="btn-project-menu" title="Project Options" style="color: var(--accent-primary); font-size: 20px; padding: 6px 10px; border-radius: 8px; line-height: 1;">≡</button>
+      <button class="btn-project-menu" title="Project Options" style="color: var(--accent-primary); font-size: 22px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 10px; line-height: 1;">≡</button>
     `;
 
     card.addEventListener('click', () => openProject(proj));
@@ -366,16 +366,16 @@ function refreshParamControls() {
 
   const layer = state.timeline?.getSelectedLayer();
   if (!layer) {
-    container.innerHTML = `<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:12px;">Timeline is empty. Click + to add an object.</p>`;
+    container.innerHTML = `<p style="color:var(--text-muted);font-size:12px;text-align:center;padding:12px;">Timeline is empty. Tap + to add an object.</p>`;
     return;
   }
 
   if (!layer.hasEffect) {
     const emptyBox = document.createElement('div');
-    emptyBox.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;background:var(--bg-surface);border:1px dashed var(--border-strong);border-radius:var(--radius-md);';
+    emptyBox.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;background:var(--bg-surface);border:1px dashed var(--border-strong);border-radius:var(--radius-md);';
     emptyBox.innerHTML = `
-      <span style="font-size:11px;color:var(--text-secondary);">No Plugin Effect attached to <b>${layer.name}</b></span>
-      <button id="btn-attach-plugin-fx" class="primary-pill-btn" style="padding:8px 16px;font-size:12px;">+ Add ${state.activeProject?.name || 'Plugin'} Effect</button>
+      <span style="font-size:12px;color:var(--text-secondary);">No Plugin Effect attached to <b>${layer.name}</b></span>
+      <button id="btn-attach-plugin-fx" class="primary-pill-btn" style="padding:10px 18px;font-size:13px;min-height:42px;">+ Add ${state.activeProject?.name || 'Plugin'} Effect</button>
     `;
     emptyBox.querySelector('#btn-attach-plugin-fx').addEventListener('click', () => {
       pushUndoSnapshot();
@@ -390,10 +390,10 @@ function refreshParamControls() {
   }
 
   const fxHeader = document.createElement('div');
-  fxHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:var(--accent-badge);border-radius:6px;font-size:11px;font-weight:700;color:var(--accent-primary);';
+  fxHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--accent-badge);border-radius:8px;font-size:12px;font-weight:700;color:var(--accent-primary);min-height:38px;';
   fxHeader.innerHTML = `
     <span>✦ Effect: ${state.activeProject?.name || 'Plugin'} (on ${layer.name})</span>
-    <button id="btn-remove-plugin-fx" title="Remove effect from this layer" style="color:var(--danger);font-weight:800;font-size:12px;padding:0 4px;">✕</button>
+    <button id="btn-remove-plugin-fx" title="Remove effect from this layer" style="color:var(--danger);font-weight:800;font-size:15px;min-width:34px;min-height:34px;display:flex;align-items:center;justify-content:center;">✕</button>
   `;
   fxHeader.querySelector('#btn-remove-plugin-fx').addEventListener('click', () => {
     pushUndoSnapshot();
@@ -405,7 +405,7 @@ function refreshParamControls() {
   container.appendChild(fxHeader);
 
   const paramsListWrap = document.createElement('div');
-  paramsListWrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+  paramsListWrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
   container.appendChild(paramsListWrap);
 
   const nowTime = state.timeline.currentTime;
@@ -446,12 +446,13 @@ function refreshParamControls() {
   );
 }
 
+// === OBJECT INSPECTOR WITH AFTER EFFECTS STYLE DRAGGABLE VALUE BOXES + OPACITY ===
 function renderSelectedLayerInspector() {
   let box = document.getElementById('layer-object-inspector');
   if (!box) {
     box = document.createElement('div');
     box.id = 'layer-object-inspector';
-    box.style.cssText = 'margin:0 16px 8px;padding:7px 10px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:6px;';
+    box.style.cssText = 'margin:0 16px 10px;padding:10px 12px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:8px;';
     const paramsArea = document.getElementById('param-controls-container');
     paramsArea.parentNode.insertBefore(box, paramsArea);
   }
@@ -462,6 +463,8 @@ function renderSelectedLayerInspector() {
     return;
   }
 
+  if (layer.opacity === undefined) layer.opacity = 1.0;
+
   const nowTime = state.timeline.currentTime;
   const evalState = state.timeline.evaluateLayerAt(layer, nowTime);
 
@@ -469,7 +472,7 @@ function renderSelectedLayerInspector() {
     `<option value="${m.id}" ${layer.blendMode === m.id ? 'selected' : ''}>${m.label}</option>`
   ).join('');
 
-  const buildTransformRow = (key, label, currentVal, step, suffix = '') => {
+  const buildTransformRow = (key, label, currentVal, step) => {
     const list = layer.transformKeyframes[key] || [];
     const hasKfNow = list.some(k => Math.abs(k.time - nowTime) < 0.06);
     const prevs = list.filter(k => k.time <= nowTime);
@@ -480,39 +483,42 @@ function renderSelectedLayerInspector() {
       `<option value="${k}" ${k === easingKey ? 'selected' : ''}>${p.label}</option>`
     ).join('');
 
+    const formattedVal = Number(currentVal).toFixed(key === 'rotation' ? 0 : 2);
+
     return `
-      <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-secondary);">
-        <span style="width:42px;font-weight:700;color:var(--text-primary);">${label}</span>
-        <input data-tkey="${key}" class="inp-transform-val param-value-box" type="number" step="${step}" value="${Number(currentVal).toFixed(key === 'rotation' ? 0 : 2)}" style="width:54px;border:none;padding:3px 4px;font-size:11px;" />
-        <button data-tkey="${key}" class="btn-transform-kf" title="Keyframe ${label}" style="width:22px;height:22px;border-radius:4px;font-size:11px;font-weight:700;background:${hasKfNow ? 'var(--accent-primary)' : 'var(--bg-card)'};color:${hasKfNow ? '#0f1c0e' : 'var(--accent-primary)'};border:1px solid var(--border-strong);">${hasKfNow ? '◆' : '◇'}</button>
-        ${list.length > 0 ? `<select data-tkey="${key}" class="sel-transform-easing" style="flex:1;background:var(--bg-card);color:var(--accent-primary);border:1px solid var(--border-subtle);border-radius:4px;font-size:9px;padding:2px;">${easingOpts}</select>` : `<span style="flex:1;font-size:9px;color:var(--text-muted);">${suffix}</span>`}
+      <div style="display:flex;align-items:center;gap:6px;min-height:36px;font-size:11px;color:var(--text-secondary);">
+        <span data-tkey="${key}" data-step="${step}" class="scrub-transform-trigger" title="Drag left/right to adjust" style="width:58px;font-weight:700;color:var(--text-primary);cursor:ew-resize;touch-action:none;padding:6px 2px;user-select:none;">↔ ${label}</span>
+        <input data-tkey="${key}" data-step="${step}" class="inp-transform-val scrub-transform-trigger param-value-box" type="number" step="${step}" value="${formattedVal}" style="width:66px;height:34px;border:1px solid var(--border-subtle);border-radius:8px;padding:4px 6px;font-size:12px;cursor:ew-resize;touch-action:none;user-select:none;" />
+        <button data-tkey="${key}" class="btn-transform-kf" title="Keyframe ${label}" style="min-width:34px;height:34px;border-radius:6px;font-size:13px;font-weight:700;background:${hasKfNow ? 'var(--accent-primary)' : 'var(--bg-card)'};color:${hasKfNow ? '#0f1c0e' : 'var(--accent-primary)'};border:1px solid var(--border-strong);">${hasKfNow ? '◆' : '◇'}</button>
+        ${list.length > 0 ? `<select data-tkey="${key}" class="sel-transform-easing" style="flex:1;height:34px;background:var(--bg-card);color:var(--accent-primary);border:1px solid var(--border-subtle);border-radius:6px;font-size:11px;padding:4px 6px;">${easingOpts}</select>` : `<span style="flex:1;font-size:10px;color:var(--text-muted);">Drag value</span>`}
       </div>
     `;
   };
 
   box.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-      <button id="btn-toggle-obj-inspector" style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--accent-primary);text-align:left;flex:1;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:38px;">
+      <button id="btn-toggle-obj-inspector" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--accent-primary);text-align:left;flex:1;min-height:38px;">
         <span>${state.isObjectInspectorOpen ? '▴' : '▾'}</span>
         <span>Object: ${layer.type} (${layer.name})</span>
       </button>
-      <button id="btn-delete-selected-layer" class="tl-btn" title="Delete this object" style="width:26px;height:24px;font-size:11px;color:var(--danger);border-color:var(--border-subtle);">🗑</button>
+      <button id="btn-delete-selected-layer" class="tl-btn" title="Delete this object" style="min-width:38px;min-height:38px;font-size:14px;color:var(--danger);border-color:var(--border-subtle);">🗑</button>
     </div>
     ${state.isObjectInspectorOpen ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding-top:4px;border-top:1px solid var(--border-subtle);">
-        <span style="font-size:10px;color:var(--text-secondary);">Blend:</span>
-        <select id="sel-layer-blend" style="flex:1;background:var(--bg-card);color:var(--accent-primary);border:1px solid var(--border-subtle);border-radius:6px;font-size:11px;font-weight:700;padding:3px 6px;">${blendOptsHtml}</select>
-        ${layer.type === 'Media' ? `<button id="btn-layer-upload-img" class="tl-btn" style="width:auto;height:24px;padding:0 8px;font-size:10px;">🖼 Image</button>` : ''}
-        <input type="color" id="inp-layer-color" value="${layer.color || '#ffffff'}" style="width:24px;height:24px;border:none;background:none;cursor:pointer;" />
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:6px;border-top:1px solid var(--border-subtle);min-height:38px;">
+        <span style="font-size:11px;color:var(--text-secondary);">Blend:</span>
+        <select id="sel-layer-blend" style="flex:1;height:36px;background:var(--bg-card);color:var(--accent-primary);border:1px solid var(--border-subtle);border-radius:8px;font-size:12px;font-weight:700;padding:4px 8px;">${blendOptsHtml}</select>
+        ${layer.type === 'Media' ? `<button id="btn-layer-upload-img" class="tl-btn" style="width:auto;min-height:36px;padding:0 12px;font-size:11px;font-weight:700;">🖼 Image</button>` : ''}
+        <input type="color" id="inp-layer-color" value="${layer.color || '#ffffff'}" style="width:36px;height:36px;border:none;background:none;cursor:pointer;" />
       </div>
       ${layer.type === 'Text' ? `
-        <input type="text" id="inp-layer-text" value="${layer.text || ''}" placeholder="Enter text here..." class="pill-input" style="border-radius:6px;padding:5px 8px;font-size:12px;text-align:left;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-subtle);" />
+        <input type="text" id="inp-layer-text" value="${layer.text || ''}" placeholder="Enter text here..." class="pill-input" style="border-radius:8px;padding:8px 12px;font-size:13px;min-height:40px;text-align:left;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-subtle);" />
       ` : ''}
-      <div style="display:flex;flex-direction:column;gap:4px;">
-        ${buildTransformRow('x', 'Pos X', evalState.x, 0.02)}
-        ${buildTransformRow('y', 'Pos Y', evalState.y, 0.02)}
-        ${buildTransformRow('scale', 'Scale', evalState.scale, 0.05)}
-        ${buildTransformRow('rotation', 'Rot °', evalState.rotation, 5)}
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${buildTransformRow('x', 'Pos X', evalState.x, 0.01)}
+        ${buildTransformRow('y', 'Pos Y', evalState.y, 0.01)}
+        ${buildTransformRow('scale', 'Scale', evalState.scale, 0.02)}
+        ${buildTransformRow('rotation', 'Rot °', evalState.rotation, 2)}
+        ${buildTransformRow('opacity', 'Opacity', evalState.opacity, 0.01)}
       </div>
     ` : ''}
   `;
@@ -548,11 +554,80 @@ function renderSelectedLayerInspector() {
     syncRender();
   });
 
+  // After Effects-style horizontal touch/mouse scrubbing on BOTH label and value box
+  box.querySelectorAll('.scrub-transform-trigger').forEach(el => {
+    let startX = 0;
+    let startVal = 0;
+    let active = false;
+    let moved = false;
+    const k = el.dataset.tkey;
+    const step = parseFloat(el.dataset.step) || 0.01;
+    const isInput = el.tagName === 'INPUT';
+
+    el.addEventListener('pointerdown', e => {
+      if (isInput && document.activeElement === el) return;
+      e.preventDefault();
+      pushUndoSnapshot();
+      active = true;
+      moved = false;
+      startX = e.clientX;
+      startVal = Number(layer[k] ?? (k === 'opacity' ? 1.0 : 0));
+      el.setPointerCapture(e.pointerId);
+    });
+
+    el.addEventListener('pointermove', e => {
+      if (!active) return;
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 3) moved = true;
+      if (!moved) return;
+
+      const delta = (dx / 3.5) * step;
+      const rawNext = startVal + delta;
+
+      if (k === 'scale') {
+        layer[k] = Math.max(0.05, Number(rawNext.toFixed(2)));
+      } else if (k === 'opacity') {
+        layer[k] = Math.max(0, Math.min(1, Number(rawNext.toFixed(2))));
+      } else if (k === 'rotation') {
+        layer[k] = Number(rawNext.toFixed(0));
+      } else {
+        layer[k] = Number(rawNext.toFixed(2));
+      }
+
+      const inp = box.querySelector(`.inp-transform-val[data-tkey="${k}"]`);
+      if (inp) inp.value = Number(layer[k]).toFixed(k === 'rotation' ? 0 : 2);
+
+      const kfAtNow = layer.transformKeyframes[k]?.find(item => Math.abs(item.time - nowTime) < 0.06);
+      if (kfAtNow) kfAtNow.value = layer[k];
+
+      renderPreviewFrame(state.timeline.currentTime);
+    });
+
+    const finishScrub = () => {
+      if (!active) return;
+      active = false;
+      // Tap without dragging opens keyboard on the input box
+      if (!moved && isInput) {
+        el.focus();
+        el.select();
+      }
+    };
+
+    el.addEventListener('pointerup', finishScrub);
+    el.addEventListener('pointercancel', () => { active = false; });
+  });
+
   box.querySelectorAll('.inp-transform-val').forEach(inp => {
     inp.addEventListener('input', e => {
       const k = e.target.dataset.tkey;
       const num = parseFloat(e.target.value) || 0;
-      layer[k] = k === 'scale' ? Math.max(0.05, num) : num;
+      if (k === 'scale') {
+        layer[k] = Math.max(0.05, num);
+      } else if (k === 'opacity') {
+        layer[k] = Math.max(0, Math.min(1, num));
+      } else {
+        layer[k] = num;
+      }
       const kfAtNow = layer.transformKeyframes[k]?.find(item => Math.abs(item.time - nowTime) < 0.06);
       if (kfAtNow) kfAtNow.value = layer[k];
       syncRender();
@@ -611,12 +686,19 @@ function renderPreviewUI() {
     }
   });
 
+  document.querySelectorAll('#screen-preview .tl-btn').forEach(btn => {
+    btn.style.minWidth = '38px';
+    btn.style.minHeight = '38px';
+    btn.style.fontSize = '14px';
+  });
+
   const specBadge = document.querySelector('#screen-preview .preview-meta-bar span:last-child');
   if (specBadge && !specBadge.dataset.scaleBound) {
     specBadge.dataset.scaleBound = '1';
     specBadge.style.cursor = 'pointer';
     specBadge.style.textDecoration = 'underline dotted';
-    specBadge.title = 'Click to cycle Preview Scale (0.25x - 1.00x)';
+    specBadge.style.padding = '4px 6px';
+    specBadge.title = 'Tap to cycle Preview Scale (0.25x - 1.00x)';
     const updateScaleLabel = () => {
       const sc = PREVIEW_SCALES[state.previewScaleIdx].toFixed(2);
       specBadge.textContent = `${sc}x [16:9] @60FPS`;
@@ -635,6 +717,8 @@ function renderPreviewUI() {
     zoomOutBtn.id = 'btn-tl-zoom-out';
     zoomOutBtn.className = 'tl-btn';
     zoomOutBtn.textContent = '−';
+    zoomOutBtn.style.minWidth = '38px';
+    zoomOutBtn.style.minHeight = '38px';
     zoomOutBtn.title = 'Zoom Out Timeline';
     zoomOutBtn.addEventListener('click', () => state.timeline.setZoom(state.timeline.zoom - 0.5));
 
@@ -642,6 +726,8 @@ function renderPreviewUI() {
     zoomInBtn.id = 'btn-tl-zoom-in';
     zoomInBtn.className = 'tl-btn';
     zoomInBtn.textContent = '🔍+';
+    zoomInBtn.style.minWidth = '38px';
+    zoomInBtn.style.minHeight = '38px';
     zoomInBtn.title = 'Zoom In Timeline';
     zoomInBtn.addEventListener('click', () => state.timeline.setZoom(state.timeline.zoom + 0.5));
 
@@ -658,6 +744,8 @@ function renderPreviewUI() {
     undoBtn.id = 'btn-preview-undo';
     undoBtn.className = 'tl-btn';
     undoBtn.textContent = '↶';
+    undoBtn.style.minWidth = '38px';
+    undoBtn.style.minHeight = '38px';
     undoBtn.title = 'Undo (Ctrl+Z)';
     undoBtn.addEventListener('click', performUndo);
 
@@ -665,6 +753,8 @@ function renderPreviewUI() {
     redoBtn.id = 'btn-preview-redo';
     redoBtn.className = 'tl-btn';
     redoBtn.textContent = '↷';
+    redoBtn.style.minWidth = '38px';
+    redoBtn.style.minHeight = '38px';
     redoBtn.title = 'Redo (Ctrl+Y)';
     redoBtn.addEventListener('click', performRedo);
 
@@ -699,7 +789,7 @@ function showAddObjectMenu(anchorBtn) {
 
   const menu = document.createElement('div');
   menu.id = 'tl-object-menu';
-  menu.style.cssText = 'position:absolute;left:16px;bottom:240px;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:6px;display:flex;flex-direction:column;gap:4px;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
+  menu.style.cssText = 'position:absolute;left:16px;bottom:260px;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:var(--radius-md);padding:8px;display:flex;flex-direction:column;gap:6px;z-index:40;box-shadow:0 8px 24px rgba(0,0,0,0.55);';
 
   const options = [
     { type: 'Adjustment', label: '✦ Adjustment Layer' },
@@ -718,7 +808,7 @@ function showAddObjectMenu(anchorBtn) {
   options.forEach(opt => {
     const btn = document.createElement('button');
     btn.textContent = opt.label;
-    btn.style.cssText = 'text-align:left;padding:7px 12px;font-size:12px;font-weight:600;border-radius:var(--radius-sm);color:var(--text-primary);';
+    btn.style.cssText = 'text-align:left;padding:11px 14px;font-size:13px;font-weight:600;border-radius:var(--radius-sm);color:var(--text-primary);min-height:42px;';
     btn.onmouseenter = () => (btn.style.backgroundColor = 'var(--accent-badge)');
     btn.onmouseleave = () => (btn.style.backgroundColor = 'transparent');
     btn.addEventListener('click', () => {
@@ -765,8 +855,8 @@ function renderSettings() {
           <div style="font-size:12px;font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
           <div style="font-size:10px;color:var(--text-muted);">${item.author} • Deleted: ${item.deletedAt || '-'}</div>
         </div>
-        <button class="btn-restore-trash" data-tidx="${i}" style="font-size:11px;font-weight:700;color:var(--accent-primary);padding:4px 8px;border:1px solid var(--border-strong);border-radius:6px;">Restore</button>
-        <button class="btn-perm-trash" data-tidx="${i}" style="font-size:11px;font-weight:700;color:var(--danger);padding:4px 8px;border:1px solid var(--border-subtle);border-radius:6px;">Delete</button>
+        <button class="btn-restore-trash" data-tidx="${i}" style="font-size:12px;font-weight:700;color:var(--accent-primary);padding:8px 12px;min-height:38px;border:1px solid var(--border-strong);border-radius:6px;">Restore</button>
+        <button class="btn-perm-trash" data-tidx="${i}" style="font-size:12px;font-weight:700;color:var(--danger);padding:8px 12px;min-height:38px;border:1px solid var(--border-subtle);border-radius:6px;">Delete</button>
       </div>
     `).join('');
 
@@ -911,27 +1001,58 @@ function init() {
     input.click();
   });
 
+  // === SMOOTH RELATIVE VIEWPORT DRAGGING (NO SNAPPING / NO PAGE SCROLL) ===
   const glCanvas = document.getElementById('gl-canvas');
   let draggingOnCanvas = false;
+  let dragPointerStartX = 0;
+  let dragPointerStartY = 0;
+  let dragLayerStartX = 0.5;
+  let dragLayerStartY = 0.5;
+
   glCanvas.style.cursor = 'move';
+  glCanvas.style.touchAction = 'none';
+  if (glCanvas.parentElement) {
+    glCanvas.parentElement.style.touchAction = 'none';
+  }
+
   glCanvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
     if (!state.timeline) return;
     const layer = state.timeline.getSelectedLayer();
     if (!layer || layer.type === 'Adjustment') return;
+
     pushUndoSnapshot();
     draggingOnCanvas = true;
+    dragPointerStartX = e.clientX;
+    dragPointerStartY = e.clientY;
+    dragLayerStartX = Number(layer.x) || 0.5;
+    dragLayerStartY = Number(layer.y) || 0.5;
     glCanvas.setPointerCapture(e.pointerId);
   });
+
   glCanvas.addEventListener('pointermove', e => {
     if (!draggingOnCanvas || !state.timeline) return;
+    e.preventDefault();
     const layer = state.timeline.getSelectedLayer();
     if (!layer) return;
+
     const rect = glCanvas.getBoundingClientRect();
-    layer.x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    layer.y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+    const dx = (e.clientX - dragPointerStartX) / Math.max(1, rect.width);
+    const dy = (e.clientY - dragPointerStartY) / Math.max(1, rect.height);
+
+    layer.x = Number(Math.max(-0.5, Math.min(1.5, dragLayerStartX + dx)).toFixed(2));
+    layer.y = Number(Math.max(-0.5, Math.min(1.5, dragLayerStartY + dy)).toFixed(2));
+
+    const nowTime = state.timeline.currentTime;
+    const kfX = layer.transformKeyframes.x?.find(item => Math.abs(item.time - nowTime) < 0.06);
+    if (kfX) kfX.value = layer.x;
+    const kfY = layer.transformKeyframes.y?.find(item => Math.abs(item.time - nowTime) < 0.06);
+    if (kfY) kfY.value = layer.y;
+
     renderSelectedLayerInspector();
-    renderPreviewFrame(state.timeline.currentTime);
+    renderPreviewFrame(nowTime);
   });
+
   glCanvas.addEventListener('pointerup', () => { draggingOnCanvas = false; });
   glCanvas.addEventListener('pointercancel', () => { draggingOnCanvas = false; });
 
