@@ -59,7 +59,7 @@ export class AureaTimeline {
     this.panStartX = 0;
     this.panInitialScroll = 0;
 
-    // Pinch-to-zoom state for mobile touchscreens
+    // Two-finger pinch zoom state
     this.activePointers = new Map();
     this.initialPinchDist = 0;
     this.initialPinchZoom = 1.0;
@@ -110,6 +110,7 @@ export class AureaTimeline {
       y: 0.5,
       scale: 1.0,
       rotation: 0,
+      opacity: 1.0,
       blendMode: 'source-over',
       color: type === 'Shape' ? '#78d96f' : '#ffffff',
       image: null,
@@ -145,7 +146,11 @@ export class AureaTimeline {
   importSnapshot(rawJson) {
     const data = JSON.parse(rawJson);
     const oldImages = new Map(this.layers.map(l => [l.id, l.image]));
-    this.layers = (data.layers || []).map(l => ({ ...l, image: oldImages.get(l.id) || null }));
+    this.layers = (data.layers || []).map(l => ({
+      opacity: 1.0,
+      ...l,
+      image: oldImages.get(l.id) || null
+    }));
     this.selectedLayerId = data.selectedLayerId || (this.layers[0]?.id ?? null);
     this.render();
   }
@@ -231,13 +236,14 @@ export class AureaTimeline {
     const y = this.evaluateTrackList(layer.transformKeyframes.y, t, layer.y);
     const scale = this.evaluateTrackList(layer.transformKeyframes.scale, t, layer.scale);
     const rotation = this.evaluateTrackList(layer.transformKeyframes.rotation, t, layer.rotation);
+    const opacity = this.evaluateTrackList(layer.transformKeyframes.opacity, t, layer.opacity ?? 1.0);
 
     const params = { ...layer.paramValues };
     Object.entries(layer.paramKeyframes).forEach(([pId, list]) => {
       if (list && list.length > 0) params[pId] = this.evaluateTrackList(list, t, params[pId]);
     });
 
-    return { x, y, scale, rotation, params };
+    return { x, y, scale, rotation, opacity, params };
   }
 
   lerpAny(a, b, alpha) {
@@ -261,6 +267,7 @@ export class AureaTimeline {
     const h = this.compCanvas.height;
 
     ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1.0;
     ctx.clearRect(0, 0, w, h);
 
     for (let i = this.layers.length - 1; i >= 0; i--) {
@@ -268,6 +275,8 @@ export class AureaTimeline {
       if (t < layer.start - 0.001 || t > layer.start + layer.length + 0.001) continue;
 
       const evalState = this.evaluateLayerAt(layer, t);
+      const layerAlpha = Math.max(0, Math.min(1, Number(evalState.opacity ?? 1.0)));
+      if (layerAlpha <= 0.001) continue;
 
       if (layer.type === 'Adjustment') {
         if (layer.hasEffect && applyPluginShader) {
@@ -275,7 +284,8 @@ export class AureaTimeline {
           if (effectedCanvas) {
             ctx.save();
             ctx.globalCompositeOperation = 'source-over';
-            ctx.clearRect(0, 0, w, h);
+            ctx.globalAlpha = layerAlpha;
+            if (layerAlpha >= 0.999) ctx.clearRect(0, 0, w, h);
             ctx.drawImage(effectedCanvas, 0, 0, w, h);
             ctx.restore();
           }
@@ -303,12 +313,14 @@ export class AureaTimeline {
 
           ctx.save();
           ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+          ctx.globalAlpha = layerAlpha;
           ctx.drawImage(masked, 0, 0, w, h);
           ctx.restore();
         }
       } else {
         ctx.save();
         ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+        ctx.globalAlpha = layerAlpha;
         this.drawLayerVisual(ctx, layer, evalState, w, h);
         ctx.restore();
       }
@@ -429,7 +441,6 @@ export class AureaTimeline {
     this.containerEl.addEventListener('pointerdown', e => {
       this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-      // Two-finger pinch zoom on touchscreens
       if (this.activePointers.size === 2) {
         this.isScrubbing = false;
         this.draggingLayer = null;
@@ -487,7 +498,6 @@ export class AureaTimeline {
           const maxStart = Math.max(0, this.duration - this.draggingLayer.length);
           this.draggingLayer.start = Math.max(0, Math.min(maxStart, this.dragInitialStart + deltaSec));
 
-          // Vertical finger/mouse drag threshold (26px for comfortable touch reordering)
           const deltaY = e.clientY - this.dragStartY;
           const curIdx = this.layers.indexOf(this.draggingLayer);
           if (deltaY < -26 && curIdx > 0) {
@@ -545,7 +555,6 @@ export class AureaTimeline {
     canvas.className = 'tl-zoom-canvas';
     canvas.style.cssText = `position:relative;width:${this.zoom * 100}%;min-height:110px;display:flex;flex-direction:column;gap:6px;touch-action:none;`;
 
-    // Taller touch-friendly scrubber ruler (24px)
     const rulerRow = document.createElement('div');
     rulerRow.style.cssText = 'position:relative;height:24px;border-bottom:1px solid var(--border-subtle);background:rgba(0,0,0,0.32);display:flex;align-items:center;';
     const step = this.zoom >= 2.5 ? 0.5 : 1.0;
@@ -558,7 +567,6 @@ export class AureaTimeline {
     canvas.appendChild(rulerRow);
 
     this.layers.forEach((layer, index) => {
-      // Touch-friendly 34px row height
       const track = document.createElement('div');
       track.style.cssText = 'position:relative;height:34px;width:100%;';
 
@@ -567,7 +575,6 @@ export class AureaTimeline {
       bar.className = 'dummy-layer-bar';
       bar.style.cssText = `position:absolute;top:1px;height:32px;left:${(layer.start / this.duration) * 100}%;width:${(layer.length / this.duration) * 100}%;cursor:grab;border:${isSelected ? '2px solid #ffffff' : '1px solid var(--border-strong)'};background:${isSelected ? 'rgba(120,217,111,0.38)' : 'var(--accent-badge)'};border-radius:6px;padding:0;justify-content:space-between;overflow:hidden;touch-action:none;`;
 
-      // Wide 24px touch handles for trimming
       const leftHandle = document.createElement('span');
       leftHandle.textContent = '◀';
       leftHandle.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:100%;font-size:10px;background:rgba(0,0,0,0.42);color:var(--accent-primary);cursor:ew-resize;flex-shrink:0;z-index:3;touch-action:none;';
@@ -609,7 +616,6 @@ export class AureaTimeline {
       bar.appendChild(label);
       bar.appendChild(rightHandle);
 
-      // Larger 12px keyframe diamonds for easier finger dragging
       const ownKfs = this.getLayerKeyframesFlat(layer);
       ownKfs.forEach(({ group, key, kfRef }) => {
         if (kfRef.time >= layer.start && kfRef.time <= layer.start + layer.length) {
